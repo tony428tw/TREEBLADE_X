@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>樹章戰鬥陀螺</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">Tree Top View Battle</p>
+            <h1>樹章戰鬥陀螺</h1>
+          </div>
+        </div>
+        <button class="ghost-button" id="recordsButton" type="button">上場紀錄</button>
+      </header>
+
+      <section class="setup-view" id="setupView">
+        <p class="hint" id="modeHint">雙方各輸入三個植物名稱，每個植物會長成一顆俯視樹章陀螺。三回合各派一種植物對決，先得兩勝的植物樹章最強。</p>
+
+        <div class="setup-grid">
+          <article class="player-card player-one">
+            <h2><span class="dot"></span>玩家一的植物隊</h2>
+            <textarea id="playerOneInput" class="plant-input" rows="3" aria-label="玩家一植物名稱">榕樹
+竹子
+櫻花</textarea>
+            <div class="plant-row" id="playerOnePreview"></div>
+          </article>
+
+          <article class="player-card player-two">
+            <h2><span class="dot"></span>玩家二的植物隊</h2>
+            <textarea id="playerTwoInput" class="plant-input" rows="3" aria-label="玩家二植物名稱">松樹
+荷花
+楓樹</textarea>
+            <div class="plant-row" id="playerTwoPreview"></div>
+          </article>
+        </div>
+
+        <div class="action-row">
+          <button class="primary-button" id="startButton" type="button">開　戰</button>
+        </div>
+      </section>
+
+      <section class="battle-view hidden" id="battleView" aria-live="polite">
+        <div class="match-header">
+          <strong id="leftNameLabel"></strong>
+          <div class="round-progress" id="roundProgress"></div>
+          <strong id="rightNameLabel"></strong>
+        </div>
+
+        <div class="battle-grid">
+          <aside class="fighter-panel player-one" id="leftPanel"></aside>
+
+          <section class="arena-wrap">
+            <div class="arena-stage">
+              <canvas id="arenaCanvas" width="720" height="720" aria-label="樹章戰鬥陀螺競技場"></canvas>
+              <div class="round-overlay hidden" id="roundOverlay"></div>
+            </div>
+            <div class="battle-controls">
+              <button class="primary-button small hidden" id="nextRoundButton" type="button">下一回合</button>
+              <button class="primary-button small" id="rematchButton" type="button">重新對戰</button>
+              <button class="ghost-button small" id="backButton" type="button">回設定</button>
+            </div>
+            <div class="battle-log" id="battleLog"></div>
+          </section>
+
+          <aside class="fighter-panel player-two" id="rightPanel"></aside>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="recordsDialog">
+      <form method="dialog" class="dialog-body">
+        <header>
+          <h2>上場紀錄</h2>
+          <button class="icon-close" value="close" aria-label="關閉">×</button>
+        </header>
+        <div id="recordsList" class="records-list"></div>
+        <menu>
+          <button class="ghost-button" id="clearRecordsButton" type="button">清除紀錄</button>
+          <button class="primary-button small" value="close">完成</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="script.js"></script>
+  </body>
+</html>
