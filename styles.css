@@ -234,6 +234,7 @@ dialog {
   --leaf-a: #68a957;
   --leaf-b: #a9d47b;
   --leaf-c: #2d7241;
+  --plant-image: none;
   --sprite-url: url("Tree top view/Tree top view1.jpg");
   --sprite-position: center;
   --sprite-size: cover;
@@ -264,12 +265,11 @@ dialog {
   inset: -4px;
   z-index: 1;
   border-radius: inherit;
-  background-image: var(--sprite-url);
-  background-position: var(--sprite-position);
-  background-size: var(--sprite-size);
+  background-image: var(--plant-image);
+  background-position: var(--plant-position, center);
+  background-size: var(--plant-size, contain);
   background-repeat: no-repeat;
   filter: saturate(1.12) contrast(1.08);
-  mix-blend-mode: multiply;
 }
 
 .tree-token::before {

@@ -76,6 +76,17 @@ const TREE_SPRITES = [
 const canopyCache = new Map();
 const treeSpriteImages = new Map();
 const processedSpriteCache = new Map();
+const GPT_PLANT_SHEET = "assets/gpt-plant-tree-top-sheet.png";
+const GPT_PLANT_SHEET_SIZE = 1254;
+const GPT_PLANT_ASSETS = {
+  broadleaf: { col: 0, row: 0, label: "榕樹闊葉 Tree top view" },
+  bamboo: { col: 1, row: 0, label: "竹葉叢 Tree top view" },
+  cherry: { col: 2, row: 0, label: "櫻花 Tree top view" },
+  pine: { col: 0, row: 1, label: "松樹針葉 Tree top view" },
+  lotus: { col: 1, row: 1, label: "荷花蓮葉 Tree top view" },
+  maple: { col: 2, row: 1, label: "楓樹 Tree top view" }
+};
+let gptPlantSheetImage = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -134,6 +145,135 @@ function plantPalette(name, index, side) {
   };
 }
 
+function plantProfile(name, index, side) {
+  const rules = [
+    { type: "lotus", keys: ["荷", "蓮", "睡蓮"], label: "荷花蓮葉" },
+    { type: "cherry", keys: ["櫻", "桃", "梅", "花", "玫", "牡丹", "杜鵑", "菊", "蘭"], label: "櫻花花冠" },
+    { type: "pine", keys: ["松", "杉", "柏", "針", "羅漢"], label: "松樹針葉" },
+    { type: "bamboo", keys: ["竹", "椰", "棕", "蒲葵", "蘇鐵", "草", "蘆", "芒", "麥", "稻"], label: "竹葉叢" },
+    { type: "maple", keys: ["楓", "槭"], label: "楓樹" },
+    { type: "broadleaf", keys: ["榕", "樟", "橡", "梧", "桂", "柳", "樹", "木"], label: "榕樹闊葉" }
+  ];
+  const rule = rules.find(item => item.keys.some(key => name.includes(key))) || {
+    type: "broadleaf",
+    label: "闊葉樹"
+  };
+  const seed = hashString(name, 4400 + side * 97 + index * 13);
+  const palettes = {
+    cherry: ["#f7a7c7", "#e86e9d", "#ffd7e7", "#6f4d38"],
+    flower: ["#e77aa8", "#f2b14f", "#b3417c", "#4d7f3e"],
+    pine: ["#1f5e3a", "#2f7d45", "#9fcf7a", "#7a5a35"],
+    bamboo: ["#73b85b", "#2f8a42", "#c9e779", "#6f8b3e"],
+    lotus: ["#67b985", "#8ed4a8", "#f0a4bf", "#6f7f42"],
+    maple: ["#c94d35", "#e39137", "#f0c35a", "#7b4930"],
+    palm: ["#88c84f", "#2f8d45", "#cce66f", "#7d6732"],
+    grass: ["#8fcf57", "#4f9b42", "#d7e879", "#80763a"],
+    willow: ["#8fcf72", "#3f8b52", "#c2dfa0", "#7a5b36"],
+    broadleaf: ["#56a64f", "#2f7f43", "#a6d66e", "#6f4f31"]
+  };
+  const colors = palettes[rule.type];
+  return {
+    type: rule.type,
+    label: rule.label,
+    asset: GPT_PLANT_ASSETS[rule.type] || GPT_PLANT_ASSETS.broadleaf,
+    seed,
+    primary: colors[seed % 3],
+    secondary: colors[(seed >>> 3) % 3],
+    accent: colors[2],
+    bark: colors[3]
+  };
+}
+
+function svgLeaf(cx, cy, rx, ry, rotate, fill) {
+  return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${rotate} ${cx} ${cy})" fill="${fill}"/>`;
+}
+
+function makePlantSvg(plant) {
+  const profile = plant.profile;
+  const seed = profile.seed;
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">`,
+    `<rect width="120" height="120" fill="none"/>`,
+    `<filter id="soft"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#244a2d" flood-opacity=".18"/></filter>`,
+    `<g filter="url(#soft)">`
+  ];
+
+  if (profile.type === "pine") {
+    for (let i = 0; i < 34; i += 1) {
+      const angle = (360 / 34) * i + (seed % 11);
+      const len = 33 + ((seed + i * 17) % 22);
+      const width = 4 + ((seed + i * 7) % 5);
+      parts.push(svgLeaf(60, 60 - len / 2, width, len, angle, i % 3 ? profile.primary : profile.secondary));
+    }
+  } else if (profile.type === "palm" || profile.type === "bamboo" || profile.type === "grass") {
+    const count = profile.type === "bamboo" ? 18 : profile.type === "grass" ? 26 : 16;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (360 / count) * i + ((seed >>> 2) % 17);
+      const len = profile.type === "grass" ? 31 + (i % 9) : 39 + (i % 7);
+      const width = profile.type === "bamboo" ? 7 : 5;
+      parts.push(svgLeaf(60, 60 - len / 2, width, len, angle, i % 2 ? profile.primary : profile.accent));
+    }
+  } else if (profile.type === "lotus") {
+    for (let i = 0; i < 11; i += 1) {
+      const angle = (360 / 11) * i + (seed % 19);
+      parts.push(svgLeaf(60, 38, 17, 28, angle, i % 2 ? profile.primary : profile.secondary));
+    }
+    for (let i = 0; i < 7; i += 1) {
+      const angle = (360 / 7) * i + 14;
+      parts.push(svgLeaf(60, 46, 9, 18, angle, profile.accent));
+    }
+  } else if (profile.type === "cherry" || profile.type === "flower") {
+    for (let i = 0; i < 28; i += 1) {
+      const a = (Math.PI * 2 * i) / 28;
+      const ring = 18 + ((seed + i * 23) % 32);
+      const cx = 60 + Math.cos(a) * ring;
+      const cy = 60 + Math.sin(a) * ring;
+      const color = i % 3 === 0 ? profile.accent : i % 2 ? profile.primary : profile.secondary;
+      parts.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${7 + (i % 5)}" fill="${color}"/>`);
+    }
+    for (let i = 0; i < 18; i += 1) {
+      const a = (Math.PI * 2 * i) / 18;
+      const ring = 12 + ((seed + i * 11) % 24);
+      parts.push(`<circle cx="${(60 + Math.cos(a) * ring).toFixed(1)}" cy="${(60 + Math.sin(a) * ring).toFixed(1)}" r="4" fill="#ffe9a7" opacity=".82"/>`);
+    }
+  } else if (profile.type === "maple") {
+    for (let i = 0; i < 18; i += 1) {
+      const angle = (360 / 18) * i + (seed % 13);
+      const color = i % 3 === 0 ? profile.accent : i % 2 ? profile.primary : profile.secondary;
+      parts.push(`<path d="M60 60 L54 24 L60 32 L67 22 L66 38 L82 28 L73 48 L96 46 L76 60 L95 76 L72 73 L80 96 L64 79 L60 104 L55 78 L38 97 L47 74 L24 76 L44 60 L24 45 L47 48 L38 27 L54 39 Z" transform="rotate(${angle} 60 60) scale(.47 .47) translate(68 68)" fill="${color}" opacity=".84"/>`);
+    }
+  } else {
+    for (let i = 0; i < 34; i += 1) {
+      const a = (Math.PI * 2 * i) / 34;
+      const ring = 12 + ((seed + i * 19) % 38);
+      const cx = 60 + Math.cos(a) * ring;
+      const cy = 60 + Math.sin(a) * ring;
+      parts.push(svgLeaf(cx.toFixed(1), cy.toFixed(1), 13 + (i % 7), 10 + (i % 6), ((i * 29 + seed) % 180), i % 2 ? profile.primary : profile.secondary));
+    }
+  }
+
+  parts.push(`<circle cx="60" cy="60" r="8" fill="${profile.bark}" opacity=".74"/>`);
+  parts.push(`<circle cx="60" cy="60" r="4" fill="none" stroke="#fff0bc" stroke-opacity=".45" stroke-width="1.5"/>`);
+  parts.push(`</g></svg>`);
+  return parts.join("");
+}
+
+function plantImageStyle(plant) {
+  const svg = encodeURIComponent(makePlantSvg(plant));
+  return `--plant-image:url('data:image/svg+xml,${svg}')`;
+}
+
+function gptPlantAssetStyle(plant) {
+  const asset = plant.profile.asset;
+  const x = asset.col === 0 ? "0%" : asset.col === 1 ? "50%" : "100%";
+  const y = asset.row === 0 ? "0%" : "100%";
+  return [
+    `--plant-image:url('${GPT_PLANT_SHEET}')`,
+    `--plant-position:${x} ${y}`,
+    `--plant-size:300% 200%`
+  ];
+}
+
 function selectTreeSprite(name, index, side) {
   const seed = hashString(name, 1200 + index * 17 + side * 97);
   const kindRules = [
@@ -175,14 +315,24 @@ function getSpriteImage(src) {
 
 TREE_SPRITES.forEach(sprite => getSpriteImage(sprite.src));
 
+function getGptPlantSheetImage() {
+  if (!gptPlantSheetImage) {
+    gptPlantSheetImage = new Image();
+    gptPlantSheetImage.src = GPT_PLANT_SHEET;
+  }
+  return gptPlantSheetImage;
+}
+
 function makePlant(name, index, side) {
   const palette = plantPalette(name, index, side);
+  const profile = plantProfile(name, index, side);
   const sprite = selectTreeSprite(name, index, side);
   return {
     name,
     index,
     side,
     palette,
+    profile,
     sprite,
     crown: stat(name, index, 1, 56, 96),
     roots: stat(name, index, 2, 42, 88),
@@ -209,11 +359,12 @@ function treeTokenMarkup(plant) {
     `--leaf-b:${plant.palette.leafB}`,
     `--leaf-c:${plant.palette.leafC}`,
     `--spin:${hashString(plant.name, plant.index) % 360}deg`,
+    ...gptPlantAssetStyle(plant),
     ...cssSpriteStyle(plant.sprite)
   ].join(";");
 
   return `
-    <div class="tree-token use-sprite" style="${style}">
+    <div class="tree-token use-generated" style="${style}">
       <span>${escapeHtml(plant.name)}</span>
     </div>
   `;
@@ -225,6 +376,7 @@ function cardMarkup(plant) {
       ${treeTokenMarkup(plant)}
       <div class="plant-stats">
         <strong>${escapeHtml(plant.name)}</strong>
+        <div>${escapeHtml(plant.profile.label)} Tree top view</div>
         <div>樹冠 ${plant.crown}　旋風 ${plant.spin}</div>
         <div>根系 ${plant.roots}　韌性 ${plant.resilience}</div>
       </div>
@@ -244,7 +396,9 @@ function renderRoundProgress() {
     if (index >= state.roundWinners.length) return "○";
     return state.roundWinners[index] === 0 ? "●" : "◆";
   }).join(" ");
-  const displayRound = Math.min(state.round + 1, MAX_ROUNDS);
+  const displayRound = state.phase === "playing"
+    ? Math.min(state.round + 1, MAX_ROUNDS)
+    : Math.max(1, Math.min(state.round, MAX_ROUNDS));
   els.roundProgress.textContent = `${marks}　第 ${displayRound} / ${MAX_ROUNDS} 回　${state.wins[0]}：${state.wins[1]}`;
 }
 
@@ -455,6 +609,174 @@ function drawTreeSprite(plant, radius) {
   return true;
 }
 
+function drawTopLeaf(x, y, rx, ry, rotation, color, alpha = 1) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMapleBlade(scale, color, rotation) {
+  ctx.save();
+  ctx.rotate(rotation);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, -48);
+  ctx.lineTo(9, -23);
+  ctx.lineTo(28, -35);
+  ctx.lineTo(21, -11);
+  ctx.lineTo(48, -8);
+  ctx.lineTo(25, 6);
+  ctx.lineTo(38, 29);
+  ctx.lineTo(12, 19);
+  ctx.lineTo(0, 50);
+  ctx.lineTo(-12, 19);
+  ctx.lineTo(-38, 29);
+  ctx.lineTo(-25, 6);
+  ctx.lineTo(-48, -8);
+  ctx.lineTo(-21, -11);
+  ctx.lineTo(-28, -35);
+  ctx.lineTo(-9, -23);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGeneratedPlantTop(plant, radius) {
+  const profile = plant.profile;
+  const seed = profile.seed;
+  const countBase = 20 + (seed % 11);
+
+  ctx.save();
+  ctx.globalAlpha *= 0.98;
+
+  if (profile.type === "pine") {
+    for (let i = 0; i < 42; i += 1) {
+      const angle = (Math.PI * 2 * i) / 42 + (seed % 21) / 100;
+      const len = radius * (0.52 + ((seed + i * 17) % 36) / 100);
+      const distance = radius * (0.12 + ((seed + i * 11) % 32) / 100);
+      drawTopLeaf(Math.cos(angle) * distance, Math.sin(angle) * distance, 4 + (i % 4), len, angle, i % 3 ? profile.primary : profile.secondary, 0.88);
+    }
+  } else if (profile.type === "palm" || profile.type === "bamboo" || profile.type === "grass") {
+    const count = profile.type === "palm" ? 18 : profile.type === "bamboo" ? 24 : 34;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + (seed % 17) / 80;
+      const len = radius * (profile.type === "grass" ? 0.46 : 0.68) + (i % 5) * 3;
+      const width = profile.type === "bamboo" ? 7 : 4.5;
+      drawTopLeaf(Math.cos(angle) * len * 0.28, Math.sin(angle) * len * 0.28, width, len, angle, i % 2 ? profile.primary : profile.accent, 0.9);
+    }
+  } else if (profile.type === "lotus") {
+    for (let i = 0; i < 14; i += 1) {
+      const angle = (Math.PI * 2 * i) / 14 + (seed % 19) / 120;
+      const dist = radius * (0.22 + (i % 4) * 0.055);
+      drawTopLeaf(Math.cos(angle) * dist, Math.sin(angle) * dist, radius * 0.22, radius * 0.35, angle, i % 2 ? profile.primary : profile.secondary, 0.92);
+    }
+    for (let i = 0; i < 7; i += 1) {
+      const angle = (Math.PI * 2 * i) / 7;
+      drawTopLeaf(Math.cos(angle) * 9, Math.sin(angle) * 9, 7, 15, angle, profile.accent, 0.86);
+    }
+  } else if (profile.type === "cherry" || profile.type === "flower") {
+    for (let i = 0; i < 38; i += 1) {
+      const angle = (Math.PI * 2 * i) / 38;
+      const dist = radius * (0.1 + ((seed + i * 23) % 74) / 100);
+      const size = 5 + ((seed + i * 7) % 8);
+      const color = i % 4 === 0 ? profile.accent : i % 2 ? profile.primary : profile.secondary;
+      ctx.save();
+      ctx.globalAlpha *= 0.92;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    for (let i = 0; i < 24; i += 1) {
+      const angle = (Math.PI * 2 * i) / 24;
+      const dist = radius * (0.16 + (i % 5) * 0.08);
+      ctx.fillStyle = "rgba(255, 237, 158, 0.78)";
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (profile.type === "maple") {
+    for (let i = 0; i < 18; i += 1) {
+      const angle = (Math.PI * 2 * i) / 18 + (seed % 11) / 80;
+      ctx.save();
+      ctx.translate(Math.cos(angle) * radius * 0.22, Math.sin(angle) * radius * 0.22);
+      drawMapleBlade(0.42 + (i % 3) * 0.04, i % 3 === 0 ? profile.accent : i % 2 ? profile.primary : profile.secondary, angle);
+      ctx.restore();
+    }
+  } else if (profile.type === "willow") {
+    for (let i = 0; i < 32; i += 1) {
+      const angle = (Math.PI * 2 * i) / 32;
+      const dist = radius * (0.18 + (i % 6) * 0.06);
+      drawTopLeaf(Math.cos(angle) * dist, Math.sin(angle) * dist, 5, radius * 0.34, angle + 0.4, i % 2 ? profile.primary : profile.secondary, 0.84);
+    }
+  } else {
+    for (let i = 0; i < countBase + 18; i += 1) {
+      const angle = (Math.PI * 2 * i) / (countBase + 18);
+      const dist = radius * (0.08 + ((seed + i * 19) % 76) / 100);
+      const rx = 10 + (i % 8);
+      const ry = 8 + ((seed + i * 5) % 9);
+      drawTopLeaf(Math.cos(angle) * dist, Math.sin(angle) * dist, rx, ry, angle + i, i % 2 ? profile.primary : profile.secondary, 0.9);
+    }
+  }
+
+  ctx.save();
+  ctx.globalAlpha *= 0.72;
+  ctx.fillStyle = profile.bark;
+  ctx.beginPath();
+  ctx.arc(0, 0, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 244, 197, 0.45)";
+  ctx.lineWidth = 1.4;
+  [4, 7, 10].forEach(ring => {
+    ctx.beginPath();
+    ctx.arc(0, 0, ring, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawGptPlantTop(plant, radius) {
+  const image = getGptPlantSheetImage();
+  if (!image.complete || !image.naturalWidth) return false;
+
+  const asset = plant.profile.asset;
+  const cellWidth = GPT_PLANT_SHEET_SIZE / 3;
+  const cellHeight = GPT_PLANT_SHEET_SIZE / 2;
+  const sx = asset.col * cellWidth;
+  const sy = asset.row * cellHeight;
+  const drawSize = radius * 2.62;
+
+  ctx.save();
+  ctx.globalAlpha *= 0.98;
+  ctx.drawImage(image, sx, sy, cellWidth, cellHeight, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha *= 0.72;
+  ctx.fillStyle = plant.profile.bark;
+  ctx.beginPath();
+  ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 244, 197, 0.45)";
+  ctx.lineWidth = 1.4;
+  [4, 7, 10].forEach(ring => {
+    ctx.beginPath();
+    ctx.arc(0, 0, ring, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.restore();
+  return true;
+}
+
 function drawTreeTop(top) {
   const plant = top.plant;
   const palette = plant.palette;
@@ -503,22 +825,9 @@ function drawTreeTop(top) {
     ctx.restore();
   });
 
-  drawTreeSprite(plant, 62);
-
-  ctx.save();
-  ctx.globalAlpha *= 0.72;
-  ctx.fillStyle = palette.bark;
-  ctx.beginPath();
-  ctx.arc(0, 0, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255, 244, 197, 0.42)";
-  ctx.lineWidth = 1.5;
-  [4, 7, 10].forEach(ring => {
-    ctx.beginPath();
-    ctx.arc(0, 0, ring, 0, Math.PI * 2);
-    ctx.stroke();
-  });
-  ctx.restore();
+  if (!drawGptPlantTop(plant, 62)) {
+    drawGeneratedPlantTop(plant, 62);
+  }
 
   ctx.restore();
 }
