@@ -386,15 +386,17 @@ dialog {
   border-radius: 44% 56% 48% 52% / 50% 45% 55% 50%;
   overflow: visible;
   color: white;
-  background:
-    radial-gradient(circle at 50% 52%, rgba(97, 69, 36, 0.35) 0 6%, transparent 7%),
-    radial-gradient(circle at 31% 27%, color-mix(in srgb, var(--leaf-b), transparent 18%) 0 13%, transparent 14%),
-    radial-gradient(circle at 70% 30%, color-mix(in srgb, var(--leaf-a), transparent 16%) 0 17%, transparent 18%),
-    radial-gradient(circle at 28% 66%, color-mix(in srgb, var(--leaf-c), transparent 16%) 0 18%, transparent 19%),
-    radial-gradient(circle at 67% 70%, color-mix(in srgb, var(--leaf-b), transparent 20%) 0 15%, transparent 16%),
-    transparent;
-  box-shadow:
-    0 14px 20px rgba(47, 96, 55, 0.16);
+  background: transparent;
+  box-shadow: none;
+}
+
+.site-footer {
+  width: min(1190px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: 0 0 28px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .tree-token::after {

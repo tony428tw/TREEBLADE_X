@@ -9,6 +9,7 @@ const state = {
   lastResult: null,
   finalWinner: null,
   recordSaved: false,
+  launchText: "",
   log: []
 };
 
@@ -20,6 +21,11 @@ const els = {
   playerTwoInput: document.querySelector("#playerTwoInput"),
   playerOnePreview: document.querySelector("#playerOnePreview"),
   playerTwoPreview: document.querySelector("#playerTwoPreview"),
+  customPlantName: document.querySelector("#customPlantName"),
+  customPlantFile: document.querySelector("#customPlantFile"),
+  addPlantImageButton: document.querySelector("#addPlantImageButton"),
+  uploadStatus: document.querySelector("#uploadStatus"),
+  customPlantList: document.querySelector("#customPlantList"),
   startButton: document.querySelector("#startButton"),
   leftNameLabel: document.querySelector("#leftNameLabel"),
   rightNameLabel: document.querySelector("#rightNameLabel"),
@@ -40,7 +46,9 @@ const els = {
 
 const ctx = els.canvas.getContext("2d");
 const MAX_ROUNDS = 3;
+const WINNING_SCORE = 4;
 const RECORD_KEY = "tree-top-battle-records";
+const CUSTOM_PLANT_KEY = "tree-top-custom-plants";
 const fallbackPlants = [
   ["榕樹", "竹子", "櫻花"],
   ["松樹", "荷花", "楓樹"]
@@ -77,7 +85,6 @@ const canopyCache = new Map();
 const treeSpriteImages = new Map();
 const processedSpriteCache = new Map();
 const GPT_PLANT_SHEET = "assets/gpt-plant-tree-top-sheet.png";
-const GPT_PLANT_SHEET_SIZE = 1254;
 const GPT_PLANT_ASSETS = {
   broadleaf: { col: 0, row: 0, label: "榕樹闊葉 Tree top view" },
   bamboo: { col: 1, row: 0, label: "竹葉叢 Tree top view" },
@@ -87,6 +94,36 @@ const GPT_PLANT_ASSETS = {
   maple: { col: 2, row: 1, label: "楓樹 Tree top view" }
 };
 let gptPlantSheetImage = null;
+const customPlantImages = new Map();
+const customPlantImageElements = new Map();
+
+function normalizedPlantName(value) {
+  return Array.from(String(value).trim()).slice(0, 8).join("");
+}
+
+function loadCustomPlantImages() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PLANT_KEY) || "{}");
+    Object.entries(saved).forEach(([name, dataUrl]) => {
+      if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
+        customPlantImages.set(name, dataUrl);
+      }
+    });
+  } catch {
+    localStorage.removeItem(CUSTOM_PLANT_KEY);
+  }
+}
+
+function saveCustomPlantImages() {
+  localStorage.setItem(
+    CUSTOM_PLANT_KEY,
+    JSON.stringify(Object.fromEntries(customPlantImages))
+  );
+}
+
+function customPlantImage(name) {
+  return customPlantImages.get(normalizedPlantName(name)) || "";
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -264,6 +301,13 @@ function plantImageStyle(plant) {
 }
 
 function gptPlantAssetStyle(plant) {
+  if (plant.customImage) {
+    return [
+      `--plant-image:url('${plant.customImage}')`,
+      "--plant-position:center",
+      "--plant-size:contain"
+    ];
+  }
   const asset = plant.profile.asset;
   const x = asset.col === 0 ? "0%" : asset.col === 1 ? "50%" : "100%";
   const y = asset.row === 0 ? "0%" : "100%";
@@ -334,6 +378,7 @@ function makePlant(name, index, side) {
     palette,
     profile,
     sprite,
+    customImage: customPlantImage(name),
     crown: stat(name, index, 1, 56, 96),
     roots: stat(name, index, 2, 42, 88),
     spin: stat(name, index, 3, 48, 95),
@@ -376,7 +421,7 @@ function cardMarkup(plant) {
       ${treeTokenMarkup(plant)}
       <div class="plant-stats">
         <strong>${escapeHtml(plant.name)}</strong>
-        <div>${escapeHtml(plant.profile.label)} Tree top view</div>
+        <div>${plant.customImage ? "自訂圖片" : escapeHtml(plant.profile.label)} Tree top view</div>
         <div>樹冠 ${plant.crown}　旋風 ${plant.spin}</div>
         <div>根系 ${plant.roots}　韌性 ${plant.resilience}</div>
       </div>
@@ -391,23 +436,99 @@ function renderPreviews() {
   els.playerTwoPreview.innerHTML = teamTwo.plants.map(cardMarkup).join("");
 }
 
+function renderCustomPlantList() {
+  els.customPlantList.innerHTML = customPlantImages.size
+    ? Array.from(customPlantImages, ([name, dataUrl]) => `
+        <div class="custom-plant-item">
+          <img src="${dataUrl}" alt="${escapeHtml(name)} Tree top view">
+          <strong>${escapeHtml(name)}</strong>
+          <button class="remove-custom-plant" type="button" data-plant-name="${escapeHtml(name)}" aria-label="移除 ${escapeHtml(name)}">移除</button>
+        </div>
+      `).join("")
+    : "";
+}
+
+function setUploadStatus(message, isError = false) {
+  els.uploadStatus.textContent = message;
+  els.uploadStatus.classList.toggle("error", isError);
+}
+
+function imageFileToTreeTop(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("無法讀取圖片。"));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("圖片格式無法辨識。"));
+      image.onload = () => {
+        const size = 512;
+        const canvas = document.createElement("canvas");
+        const localCtx = canvas.getContext("2d");
+        canvas.width = size;
+        canvas.height = size;
+        const scale = Math.min(size / image.naturalWidth, size / image.naturalHeight);
+        const width = image.naturalWidth * scale;
+        const height = image.naturalHeight * scale;
+        localCtx.clearRect(0, 0, size, size);
+        localCtx.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+        resolve(canvas.toDataURL("image/webp", 0.86));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addCustomPlantImage() {
+  const name = normalizedPlantName(els.customPlantName.value);
+  const file = els.customPlantFile.files[0];
+  if (!name) {
+    setUploadStatus("請先輸入植物名稱。", true);
+    els.customPlantName.focus();
+    return;
+  }
+  if (!file) {
+    setUploadStatus("請選擇對應的 Tree top view 圖片。", true);
+    return;
+  }
+  if (!file.type.startsWith("image/")) {
+    setUploadStatus("僅支援 PNG、JPG 或 WebP 圖片。", true);
+    return;
+  }
+
+  els.addPlantImageButton.disabled = true;
+  setUploadStatus("正在處理圖片…");
+  try {
+    const dataUrl = await imageFileToTreeTop(file);
+    customPlantImages.set(name, dataUrl);
+    customPlantImageElements.delete(name);
+    saveCustomPlantImages();
+    els.customPlantName.value = "";
+    els.customPlantFile.value = "";
+    renderCustomPlantList();
+    renderPreviews();
+    setUploadStatus(`已加入「${name}」，隊伍輸入相同名稱即可使用。`);
+  } catch (error) {
+    setUploadStatus(error.message || "圖片處理失敗。", true);
+  } finally {
+    els.addPlantImageButton.disabled = false;
+  }
+}
+
 function renderRoundProgress() {
-  const marks = Array.from({ length: MAX_ROUNDS }, (_, index) => {
-    if (index >= state.roundWinners.length) return "○";
-    return state.roundWinners[index] === 0 ? "●" : "◆";
-  }).join(" ");
-  const displayRound = state.phase === "playing"
-    ? Math.min(state.round + 1, MAX_ROUNDS)
-    : Math.max(1, Math.min(state.round, MAX_ROUNDS));
-  els.roundProgress.textContent = `${marks}　第 ${displayRound} / ${MAX_ROUNDS} 回　${state.wins[0]}：${state.wins[1]}`;
+  const recent = state.roundWinners
+    .slice(-5)
+    .map(winner => winner === null ? "－" : winner === 0 ? "●" : "◆")
+    .join(" ");
+  const displayRound = state.phase === "finished" ? state.round : state.round + 1;
+  els.roundProgress.textContent = `${recent || "○"}　第 ${displayRound} 局　${state.wins[0]}：${state.wins[1]} 分（先得 ${WINNING_SCORE} 分）`;
 }
 
 function plantStatus(plant, index, activeIndex) {
   if (plant.result) return plant.result;
-  if (index === activeIndex && state.phase === "playing") return "旋轉中";
+  if (index === activeIndex && (state.phase === "playing" || state.phase === "launching")) return "出戰中";
   if (index === activeIndex && state.phase === "paused") return "剛出戰";
-  if (index < state.round) return "已出戰";
-  return "待戰";
+  return "待命";
 }
 
 function renderPanel(panel, team, activeIndex) {
@@ -435,7 +556,7 @@ function renderBattleUi() {
   els.rightNameLabel.textContent = "玩家二植物隊";
   renderRoundProgress();
 
-  const activeIndex = Math.min(state.activeIndex, MAX_ROUNDS - 1);
+  const activeIndex = state.activeIndex % MAX_ROUNDS;
   renderPanel(els.leftPanel, state.teams[0], activeIndex);
   renderPanel(els.rightPanel, state.teams[1], activeIndex);
   els.battleLog.innerHTML = state.log.map(line => `<div>${escapeHtml(line)}</div>`).join("");
@@ -444,6 +565,17 @@ function renderBattleUi() {
 }
 
 function renderRoundOverlay() {
+  if (state.phase === "launching") {
+    els.roundOverlay.innerHTML = `
+      <div class="round-overlay-card launch-countdown">
+        <strong>${escapeHtml(state.launchText)}</strong>
+        <span>雙方準備同時發射</span>
+      </div>
+    `;
+    els.roundOverlay.classList.remove("hidden");
+    return;
+  }
+
   if ((state.phase !== "paused" && state.phase !== "finished") || !state.lastResult) {
     els.roundOverlay.classList.add("hidden");
     els.roundOverlay.innerHTML = "";
@@ -451,14 +583,25 @@ function renderRoundOverlay() {
   }
 
   const result = state.lastResult;
+  if (result.winner === null) {
+    els.roundOverlay.innerHTML = `
+      <div class="round-overlay-card">
+        <strong>平手・本局不計分</strong>
+        <span>目前比數　玩家一 ${state.wins[0]} - ${state.wins[1]} 玩家二</span>
+        <span>按下一局重新對戰</span>
+      </div>
+    `;
+    els.roundOverlay.classList.remove("hidden");
+    return;
+  }
   const winnerPlant = result.winner === 0 ? result.left : result.right;
   const winnerSide = result.winner === 0 ? "玩家一" : "玩家二";
-  const closing = state.phase === "finished" ? `${winnerSide}的 ${winnerPlant.name} 帶隊封王` : "按下一回合繼續";
+  const closing = state.phase === "finished" ? `${winnerSide}的 ${winnerPlant.name} 帶隊封王` : "按下一局繼續";
 
   els.roundOverlay.innerHTML = `
     <div class="round-overlay-card">
-      <strong>${escapeHtml(winnerPlant.name)} 勝出本回合</strong>
-      <span>目前比數　玩家一 ${state.wins[0]} - ${state.wins[1]} 玩家二</span>
+      <strong>${escapeHtml(result.finish.label)}・${escapeHtml(winnerPlant.name)} +${result.points} 分</strong>
+      <span>目前比數　玩家一 ${state.wins[0]} - ${state.wins[1]} 玩家二（先得 ${WINNING_SCORE} 分）</span>
       <span>${escapeHtml(closing)}</span>
     </div>
   `;
@@ -504,6 +647,21 @@ function drawArenaBase(size) {
   ctx.beginPath();
   ctx.arc(center, center, center * 0.58, Math.PI * 0.16, Math.PI * 1.08);
   ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(center, center);
+  ctx.strokeStyle = "rgba(86, 139, 58, 0.42)";
+  ctx.lineWidth = Math.max(3, size * 0.008);
+  for (let i = 0; i < 36; i += 1) {
+    const angle = Math.PI * 2 * i / 36;
+    const inner = center * 0.5;
+    const outer = center * (i % 3 === 0 ? 0.66 : 0.62);
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+    ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+    ctx.stroke();
+  }
   ctx.restore();
 
   ctx.save();
@@ -745,12 +903,27 @@ function drawGeneratedPlantTop(plant, radius) {
 }
 
 function drawGptPlantTop(plant, radius) {
+  if (plant.customImage) {
+    let image = customPlantImageElements.get(plant.name);
+    if (!image || image.src !== plant.customImage) {
+      image = new Image();
+      image.src = plant.customImage;
+      customPlantImageElements.set(plant.name, image);
+    }
+    if (!image.complete || !image.naturalWidth) return false;
+    const drawSize = radius * 2.62;
+    ctx.save();
+    ctx.globalAlpha *= 0.98;
+    ctx.drawImage(image, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+    ctx.restore();
+    return true;
+  }
   const image = getGptPlantSheetImage();
   if (!image.complete || !image.naturalWidth) return false;
 
   const asset = plant.profile.asset;
-  const cellWidth = GPT_PLANT_SHEET_SIZE / 3;
-  const cellHeight = GPT_PLANT_SHEET_SIZE / 2;
+  const cellWidth = image.naturalWidth / 3;
+  const cellHeight = image.naturalHeight / 2;
   const sx = asset.col * cellWidth;
   const sy = asset.row * cellHeight;
   const drawSize = radius * 2.62;
@@ -779,19 +952,10 @@ function drawGptPlantTop(plant, radius) {
 
 function drawTreeTop(top) {
   const plant = top.plant;
-  const palette = plant.palette;
-  const blobs = getCanopyBlobs(plant);
 
   ctx.save();
   ctx.translate(top.x, top.y);
   ctx.globalAlpha = top.alpha;
-
-  ctx.save();
-  ctx.fillStyle = "rgba(29, 66, 37, 0.18)";
-  ctx.beginPath();
-  ctx.ellipse(10, 19, top.radius * 1.18, top.radius * 0.36, -0.08, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 
   ctx.rotate(top.spin);
   ctx.scale(top.scale, top.scale);
@@ -810,23 +974,44 @@ function drawTreeTop(top) {
   });
   ctx.restore();
 
-  blobs.forEach(blob => {
-    const color = blob.color === 0 ? palette.leafA : blob.color === 1 ? palette.leafB : palette.leafC;
-    const x = Math.cos(blob.angle) * blob.distance;
-    const y = Math.sin(blob.angle) * blob.distance;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(blob.rotate);
-    ctx.globalAlpha *= blob.alpha;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, blob.radius, blob.radius * blob.squash, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  });
-
   if (!drawGptPlantTop(plant, 62)) {
     drawGeneratedPlantTop(plant, 62);
+  }
+
+  ctx.restore();
+}
+
+function drawBurstPieces(top, burstProgress) {
+  const pieceCount = 10;
+  const spread = burstProgress * top.radius * 1.25;
+  const fade = Math.max(0.08, 1 - burstProgress * 0.82);
+
+  ctx.save();
+  ctx.translate(top.x, top.y);
+  ctx.globalAlpha = top.alpha * fade;
+  ctx.rotate(top.spin);
+  ctx.scale(top.scale, top.scale);
+
+  for (let i = 0; i < pieceCount; i += 1) {
+    const startAngle = Math.PI * 2 * i / pieceCount;
+    const endAngle = Math.PI * 2 * (i + 1) / pieceCount;
+    const middleAngle = (startAngle + endAngle) / 2;
+    const uneven = 0.72 + (hashString(`${top.plant.name}-burst-${i}`, 822) % 42) / 100;
+    const distance = spread * uneven;
+
+    ctx.save();
+    ctx.translate(Math.cos(middleAngle) * distance, Math.sin(middleAngle) * distance);
+    ctx.rotate((i % 2 === 0 ? 1 : -1) * burstProgress * (0.18 + i * 0.025));
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 94, startAngle - 0.025, endAngle + 0.025);
+    ctx.closePath();
+    ctx.clip();
+
+    if (!drawGptPlantTop(top.plant, 62)) {
+      drawGeneratedPlantTop(top.plant, 62);
+    }
+    ctx.restore();
   }
 
   ctx.restore();
@@ -920,11 +1105,25 @@ function resolveRound(leftPlant, rightPlant) {
   const rightLuck = ((hashString(rightPlant.name, rightPlant.index + 17) % 19) - 9) * 0.8;
   const leftScore = leftPower + leftLuck;
   const rightScore = rightPower + rightLuck;
-  const winner = leftScore >= rightScore ? 0 : 1;
   const diff = Math.abs(leftScore - rightScore);
+  const isDraw = diff < 2.4;
+  const winner = isDraw ? null : leftScore >= rightScore ? 0 : 1;
+  const winnerPlant = winner === 0 ? leftPlant : rightPlant;
+  const loserPlant = winner === 0 ? rightPlant : leftPlant;
+  let finish = { type: "spin", label: "殘存結局 Spin Finish", points: 1 };
+  if (!isDraw && diff >= 34 && winnerPlant.spin >= 78) {
+    finish = { type: "xtreme", label: "極限結局 Xtreme Finish", points: 3 };
+  } else if (!isDraw && diff >= 21 && winnerPlant.crown + winnerPlant.spin >= 150) {
+    finish = { type: "burst", label: "爆裂結局 Burst Finish", points: 2 };
+  } else if (!isDraw && diff >= 12 && winnerPlant.crown >= loserPlant.resilience - 8) {
+    finish = { type: "over", label: "擊飛結局 Over Finish", points: 2 };
+  }
   const damage = clamp(Math.round(22 + diff / 3.4), 18, 64);
 
-  if (winner === 0) {
+  if (winner === null) {
+    leftPlant.hp = Math.max(16, leftPlant.hp - Math.round(damage * 0.28));
+    rightPlant.hp = Math.max(16, rightPlant.hp - Math.round(damage * 0.28));
+  } else if (winner === 0) {
     rightPlant.hp = Math.max(0, rightPlant.hp - damage);
     leftPlant.hp = Math.max(16, leftPlant.hp - Math.round(damage * 0.32));
   } else {
@@ -934,6 +1133,8 @@ function resolveRound(leftPlant, rightPlant) {
 
   return {
     winner,
+    finish,
+    points: isDraw ? 0 : finish.points,
     diff,
     damage,
     left: leftPlant,
@@ -959,6 +1160,17 @@ function drawPostRoundScene(result) {
   });
 
   const tops = spawnTops(result.left, result.right);
+  if (result.winner === null) {
+    tops[0].x = center - size * 0.08;
+    tops[0].y = center + size * 0.04;
+    tops[1].x = center + size * 0.08;
+    tops[1].y = center - size * 0.04;
+    tops[0].alpha = 0.58;
+    tops[1].alpha = 0.58;
+    drawTreeTop(tops[0]);
+    drawTreeTop(tops[1]);
+    return;
+  }
   tops[0].x = center - (result.winner === 0 ? size * 0.02 : size * 0.18);
   tops[0].y = center + (result.winner === 0 ? size * 0.04 : size * 0.13);
   tops[0].spin = 2.4;
@@ -967,7 +1179,11 @@ function drawPostRoundScene(result) {
   tops[1].y = center - (result.winner === 1 ? size * 0.02 : size * 0.12);
   tops[1].spin = -1.7;
   tops[1].alpha = result.winner === 1 ? 0.95 : 0.2;
-  drawTreeTop(tops[1 - result.winner]);
+  if (result.finish.type === "burst") {
+    drawBurstPieces(tops[1 - result.winner], 0.92);
+  } else {
+    drawTreeTop(tops[1 - result.winner]);
+  }
   drawTreeTop(tops[result.winner]);
 }
 
@@ -979,17 +1195,93 @@ function animateRound(leftPlant, rightPlant, result) {
   const limit = center * 0.82;
   const tops = spawnTops(leftPlant, rightPlant);
   const fragments = makeFragments(leftPlant, rightPlant, result, size);
-  let frame = 0;
+  const duration = result.finish.type === "xtreme" ? 11800 : 10500;
+  const trails = [[], []];
+  let startTime = 0;
+  let previousTime = 0;
+  let lastCollision = 0;
+  let rushTriggered = false;
 
-  function tick() {
-    frame += 1;
+  function drawTrail(trail, color) {
+    if (trail.length < 2) return;
+    ctx.save();
+    ctx.lineCap = "round";
+    for (let i = 1; i < trail.length; i += 1) {
+      const opacity = (i / trail.length) * 0.28;
+      ctx.strokeStyle = color.replace(")", ` / ${opacity})`).replace("hsl", "hsl");
+      ctx.lineWidth = 2 + i / trail.length * 8;
+      ctx.beginPath();
+      ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+      ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawBattlePhase(progress) {
+    const phase = progress < 0.18
+      ? "加速軌道・高速進場"
+      : progress < 0.72
+        ? "連續追撞・攻防拉鋸"
+        : progress < 0.9
+          ? "極速衝刺・決勝碰撞"
+          : result.winner === null
+            ? "同步失速・平手"
+            : result.finish.label;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = `900 ${Math.max(14, size * 0.025)}px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = "rgba(255, 255, 242, 0.9)";
+    ctx.strokeStyle = "rgba(31, 72, 42, 0.72)";
+    ctx.lineWidth = 5;
+    ctx.strokeText(phase, center, size * 0.1);
+    ctx.fillText(phase, center, size * 0.1);
+    ctx.restore();
+  }
+
+  function tick(timestamp) {
+    if (!startTime) {
+      startTime = timestamp;
+      previousTime = timestamp;
+    }
+    const elapsed = timestamp - startTime;
+    const delta = Math.min(34, Math.max(8, timestamp - previousTime)) / 16.667;
+    previousTime = timestamp;
+    const progress = clamp(elapsed / duration, 0, 1);
     drawArenaBase(size);
 
-    tops.forEach(top => {
-      top.x += top.vx;
-      top.y += top.vy;
-      top.spin += top.spinRate;
-      top.spinRate *= 0.996;
+    tops.forEach((top, side) => {
+      const dxCenter = top.x - center;
+      const dyCenter = top.y - center;
+      const distCenter = Math.max(1, Math.hypot(dxCenter, dyCenter));
+      const tangent = side === 0 ? 1 : -1;
+
+      if (progress < 0.18) {
+        top.vx += (-dyCenter / distCenter) * 0.075 * tangent * delta;
+        top.vy += (dxCenter / distCenter) * 0.075 * tangent * delta;
+      } else if (progress < 0.72) {
+        top.vx += (-dxCenter / distCenter) * 0.026 * delta;
+        top.vy += (-dyCenter / distCenter) * 0.026 * delta;
+      } else {
+        const opponent = tops[1 - side];
+        const chaseX = opponent.x - top.x;
+        const chaseY = opponent.y - top.y;
+        const chaseDist = Math.max(1, Math.hypot(chaseX, chaseY));
+        top.vx += chaseX / chaseDist * 0.045 * delta;
+        top.vy += chaseY / chaseDist * 0.045 * delta;
+      }
+
+      const speed = Math.hypot(top.vx, top.vy);
+      const maxSpeed = progress < 0.18 ? 5.2 : progress < 0.9 ? 4.6 : 3.4;
+      if (speed > maxSpeed) {
+        top.vx = top.vx / speed * maxSpeed;
+        top.vy = top.vy / speed * maxSpeed;
+      }
+
+      top.x += top.vx * delta;
+      top.y += top.vy * delta;
+      top.spin += top.spinRate * delta;
+      top.spinRate *= Math.pow(progress > 0.9 ? 0.97 : 0.9984, delta);
 
       const dx = top.x - center;
       const dy = top.y - center;
@@ -997,11 +1289,14 @@ function animateRound(leftPlant, rightPlant, result) {
       if (dist > limit - top.radius * 0.42) {
         const nx = dx / dist;
         const ny = dy / dist;
-        top.vx -= nx * 0.22;
-        top.vy -= ny * 0.22;
-        top.vx *= 0.96;
-        top.vy *= 0.96;
+        top.vx -= nx * 0.34 * delta;
+        top.vy -= ny * 0.34 * delta;
+        top.vx *= 0.94;
+        top.vy *= 0.94;
       }
+
+      trails[side].push({ x: top.x, y: top.y });
+      if (trails[side].length > 18) trails[side].shift();
     });
 
     const a = tops[0];
@@ -1009,54 +1304,93 @@ function animateRound(leftPlant, rightPlant, result) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.hypot(dx, dy);
-    if (dist < a.radius + b.radius && frame % 8 === 0) {
+    if (dist < a.radius + b.radius && elapsed - lastCollision > 330) {
+      lastCollision = elapsed;
       const nx = dx / Math.max(1, dist);
       const ny = dy / Math.max(1, dist);
       const hitA = collisionPush(b, a);
       const hitB = collisionPush(a, b);
-      a.vx -= nx * hitA;
-      a.vy -= ny * hitA;
-      b.vx += nx * hitB;
-      b.vy += ny * hitB;
+      a.vx -= nx * hitA * 1.35;
+      a.vy -= ny * hitA * 1.35;
+      b.vx += nx * hitB * 1.35;
+      b.vy += ny * hitB * 1.35;
       a.spinRate *= -1.035;
       b.spinRate *= -1.035;
     }
 
-    if (frame > 168) {
-      tops[1 - result.winner].alpha = Math.max(0.18, tops[1 - result.winner].alpha - 0.015);
-      tops[1 - result.winner].spinRate *= 0.955;
+    if (progress > 0.72 && !rushTriggered && result.winner !== null) {
+      rushTriggered = true;
+      const winnerTop = tops[result.winner];
+      const loserTop = tops[1 - result.winner];
+      const rushX = loserTop.x - winnerTop.x;
+      const rushY = loserTop.y - winnerTop.y;
+      const rushDist = Math.max(1, Math.hypot(rushX, rushY));
+      winnerTop.vx = rushX / rushDist * 6.2;
+      winnerTop.vy = rushY / rushDist * 6.2;
     }
 
-    if (frame > 46) {
-      fragments.forEach(fragment => {
-        fragment.alpha = Math.min(0.62, fragment.alpha + 0.026);
-        fragment.x += fragment.vx;
-        fragment.y += fragment.vy;
-        fragment.vy += 0.012;
-        fragment.spin += fragment.spinRate;
+    if (progress > 0.9 && result.winner !== null) {
+      const loserTop = tops[1 - result.winner];
+      loserTop.alpha = Math.max(0.16, 1 - (progress - 0.9) * 7.4);
+      loserTop.spinRate *= Math.pow(0.91, delta);
+      if (result.finish.type === "over" || result.finish.type === "xtreme") {
+        const awayX = loserTop.x - center;
+        const awayY = loserTop.y - center;
+        const awayDist = Math.max(1, Math.hypot(awayX, awayY));
+        loserTop.vx += awayX / awayDist * 0.18 * delta;
+        loserTop.vy += awayY / awayDist * 0.18 * delta;
+      }
+    } else if (progress > 0.9) {
+      tops.forEach(top => {
+        top.alpha = Math.max(0.32, 1 - (progress - 0.9) * 5.5);
       });
     }
 
-    fragments.forEach(drawLeafFragment);
-    drawTreeTop(tops[0]);
-    drawTreeTop(tops[1]);
+    if (progress > 0.42) {
+      fragments.forEach(fragment => {
+        fragment.alpha = Math.min(0.62, fragment.alpha + 0.018 * delta);
+        fragment.x += fragment.vx * delta;
+        fragment.y += fragment.vy * delta;
+        fragment.vy += 0.008 * delta;
+        fragment.spin += fragment.spinRate * delta;
+      });
+    }
 
-    if (frame < 228) {
+    drawTrail(trails[0], "hsl(88 76% 48%)");
+    drawTrail(trails[1], "hsl(342 78% 60%)");
+    fragments.forEach(drawLeafFragment);
+    if (result.finish.type === "burst" && result.winner !== null && progress > 0.88) {
+      drawTreeTop(tops[result.winner]);
+      drawBurstPieces(tops[1 - result.winner], clamp((progress - 0.88) / 0.12, 0, 1));
+    } else {
+      drawTreeTop(tops[0]);
+      drawTreeTop(tops[1]);
+    }
+    drawBattlePhase(progress);
+
+    if (progress < 1) {
       state.animationId = requestAnimationFrame(tick);
     } else {
       endRound(result);
     }
   }
 
-  tick();
+  state.animationId = requestAnimationFrame(tick);
 }
 
 function makeRoundLog(roundNumber, result) {
   const leftName = result.left.name;
   const rightName = result.right.name;
+  if (result.winner === null) {
+    return [
+      `第 ${roundNumber} 局：${leftName} 對 ${rightName}。`,
+      "• 雙方同時達成得分條件，裁判判定平手。",
+      "• 本局不計分，輪替後重新對戰。"
+    ];
+  }
   const winner = result.winner === 0 ? result.left : result.right;
   const loser = result.winner === 0 ? result.right : result.left;
-  const lines = [`第 ${roundNumber} 回合：${leftName} 對 ${rightName}。`];
+  const lines = [`第 ${roundNumber} 局：${leftName} 對 ${rightName}。`];
   const hitCount = Math.max(3, Math.min(5, Math.round(result.damage / 14)));
 
   for (let i = 0; i < hitCount; i += 1) {
@@ -1064,61 +1398,82 @@ function makeRoundLog(roundNumber, result) {
     lines.push(`• ${phrase}，${winner.name} 保住章心。`);
   }
 
-  lines.push(`• ${loser.name} 的樹章失去平衡，${winner.name} 勝出本回合。`);
+  lines.push(`• ${result.finish.label}：${winner.name} 取得 ${result.points} 分。`);
+  lines.push(`• ${loser.name} 落敗，${winner.name} 勝出本局。`);
   lines.push(`• 生命力：${leftName} ${Math.round(result.after[0])}%，${rightName} ${Math.round(result.after[1])}%`);
   return lines;
 }
 
 function endRound(result) {
-  const leftPlant = state.teams[0].plants[Math.min(state.round, MAX_ROUNDS - 1)];
-  const rightPlant = state.teams[1].plants[Math.min(state.round, MAX_ROUNDS - 1)];
+  const leftPlant = state.teams[0].plants[state.activeIndex];
+  const rightPlant = state.teams[1].plants[state.activeIndex];
 
-  state.wins[result.winner] += 1;
+  if (result.winner !== null) {
+    state.wins[result.winner] += result.points;
+  }
   state.roundWinners[state.round] = result.winner;
-  leftPlant.result = result.winner === 0 ? "勝" : "敗";
-  rightPlant.result = result.winner === 1 ? "勝" : "敗";
+  leftPlant.result = result.winner === null ? "平" : result.winner === 0 ? `+${result.points}` : "敗";
+  rightPlant.result = result.winner === null ? "平" : result.winner === 1 ? `+${result.points}` : "敗";
   state.lastResult = result;
   state.log = makeRoundLog(state.round + 1, result);
   state.round += 1;
   drawPostRoundScene(result);
 
-  const finished = state.wins[0] >= 2 || state.wins[1] >= 2 || state.round >= MAX_ROUNDS;
+  const finished = state.wins[0] >= WINNING_SCORE || state.wins[1] >= WINNING_SCORE;
   if (finished) {
     finishMatch();
     return;
   }
 
   state.phase = "paused";
-  state.activeIndex = Math.max(0, state.round - 1);
+  state.activeIndex = (state.round - 1) % MAX_ROUNDS;
   renderBattleUi();
 }
 
 function playRound() {
-  if (state.phase === "playing" || state.phase === "finished") return;
-  state.phase = "playing";
-  state.activeIndex = Math.min(state.round, MAX_ROUNDS - 1);
+  if (state.phase === "playing" || state.phase === "launching" || state.phase === "finished") return;
+  state.phase = "launching";
+  state.activeIndex = state.round % MAX_ROUNDS;
   state.lastResult = null;
+  state.launchText = "3";
+  state.log = [`第 ${state.round + 1} 局：裁判倒數「3、2、1，Go Shoot！」`];
   renderBattleUi();
 
   const leftPlant = state.teams[0].plants[state.activeIndex];
   const rightPlant = state.teams[1].plants[state.activeIndex];
-  const result = resolveRound(leftPlant, rightPlant);
-  animateRound(leftPlant, rightPlant, result);
+  const countdown = ["3", "2", "1", "Go Shoot！"];
+  let countdownIndex = 0;
+
+  function advanceCountdown() {
+    if (state.phase !== "launching") return;
+    state.launchText = countdown[countdownIndex];
+    renderBattleUi();
+    countdownIndex += 1;
+    if (countdownIndex < countdown.length) {
+      window.setTimeout(advanceCountdown, 620);
+      return;
+    }
+    window.setTimeout(() => {
+      if (state.phase !== "launching") return;
+      state.phase = "playing";
+      state.launchText = "";
+      renderBattleUi();
+      const result = resolveRound(leftPlant, rightPlant);
+      animateRound(leftPlant, rightPlant, result);
+    }, 520);
+  }
+
+  advanceCountdown();
 }
 
 function finishMatch() {
   state.phase = "finished";
-  state.activeIndex = Math.max(0, state.round - 1);
-
-  const leftTotal = state.teams[0].plants.reduce((sum, plant) => sum + plant.hp, 0);
-  const rightTotal = state.teams[1].plants.reduce((sum, plant) => sum + plant.hp, 0);
-  const winner = state.wins[0] === state.wins[1]
-    ? (leftTotal >= rightTotal ? 0 : 1)
-    : (state.wins[0] > state.wins[1] ? 0 : 1);
+  state.activeIndex = Math.max(0, state.round - 1) % MAX_ROUNDS;
+  const winner = state.wins[0] >= WINNING_SCORE ? 0 : 1;
 
   state.finalWinner = winner;
   const championPlants = state.teams[winner].plants
-    .filter(plant => plant.result === "勝")
+    .filter(plant => plant.result.startsWith("+"))
     .map(plant => plant.name)
     .join("、") || state.teams[winner].plants[0].name;
   state.log.push(`• 最終勝者：玩家${winner === 0 ? "一" : "二"}植物隊（${state.wins[0]}：${state.wins[1]}），最強樹章：${championPlants}`);
@@ -1145,6 +1500,15 @@ function saveRecord(winner, championPlants) {
 
 function startBattle() {
   cancelAnimationFrame(state.animationId);
+  const rosters = [
+    splitPlants(els.playerOneInput.value, 0),
+    splitPlants(els.playerTwoInput.value, 1)
+  ];
+  if (rosters.some(names => new Set(names).size < MAX_ROUNDS)) {
+    els.modeHint.textContent = "3on3 陣容中的三種植物不可重複，請調整後再開戰。";
+    return;
+  }
+  els.modeHint.textContent = "3on3 輪替賽：雙方各準備三顆不同植物樹章，依序出戰。率先取得 4 分者獲勝。";
   state.teams = [
     makeTeam(els.playerOneInput.value, 0),
     makeTeam(els.playerTwoInput.value, 1)
@@ -1157,7 +1521,8 @@ function startBattle() {
   state.lastResult = null;
   state.finalWinner = null;
   state.recordSaved = false;
-  state.log = ["第 1 回合準備開始，第一顆樹章落入草地競技場。"];
+  state.launchText = "";
+  state.log = ["3on3 第一局準備開始，率先取得 4 分者獲勝。"];
 
   els.setupView.classList.add("hidden");
   els.battleView.classList.remove("hidden");
@@ -1169,8 +1534,8 @@ function startBattle() {
 
 function nextRound() {
   if (state.phase !== "paused") return;
-  state.activeIndex = Math.min(state.round, MAX_ROUNDS - 1);
-  state.log = [`第 ${state.round + 1} 回合準備開始，下一顆樹章上場。`];
+  state.activeIndex = state.round % MAX_ROUNDS;
+  state.log = [`第 ${state.round + 1} 局準備開始，雙方輪替下一順位樹章。`];
   playRound();
 }
 
@@ -1206,6 +1571,18 @@ function renderRecords() {
 
 els.playerOneInput.addEventListener("input", renderPreviews);
 els.playerTwoInput.addEventListener("input", renderPreviews);
+els.addPlantImageButton.addEventListener("click", addCustomPlantImage);
+els.customPlantList.addEventListener("click", event => {
+  const button = event.target.closest("[data-plant-name]");
+  if (!button) return;
+  const name = button.dataset.plantName;
+  customPlantImages.delete(name);
+  customPlantImageElements.delete(name);
+  saveCustomPlantImages();
+  renderCustomPlantList();
+  renderPreviews();
+  setUploadStatus(`已移除「${name}」的自訂圖片。`);
+});
 els.startButton.addEventListener("click", startBattle);
 els.nextRoundButton.addEventListener("click", nextRound);
 els.rematchButton.addEventListener("click", startBattle);
@@ -1229,4 +1606,6 @@ window.addEventListener("resize", () => {
   }
 });
 
+loadCustomPlantImages();
+renderCustomPlantList();
 renderPreviews();
