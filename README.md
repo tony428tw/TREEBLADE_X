@@ -6,7 +6,7 @@
 
 以植物樹冠為戰刃、以自然之力決勝的瀏覽器戰鬥陀螺遊戲。
 
-[開始遊玩](https://tony428tw.github.io/TREEBLADE_X/) · [回報問題](https://github.com/tony428tw/TREEBLADE_X/issues)
+[開始遊玩](https://tony428tw.github.io/TREEBLADE_X/) 
 
 </div>
 
