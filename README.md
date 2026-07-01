@@ -84,28 +84,6 @@ python -m http.server 8765
 http://127.0.0.1:8765/
 ```
 
-## 專案結構
-
-```text
-TREEBLADE_X/
-├── index.html                 # 遊戲頁面
-├── styles.css                # 介面與響應式樣式
-├── script.js                 # 戰鬥、計分、動畫與儲存邏輯
-├── README.md
-├── assets/
-│   ├── TreeBladeX_cover.png  # README 封面
-│   ├── TreeBladeX_logo.png   # 程式標題 Logo
-│   └── gpt-plant-tree-top-sheet.png
-└── Tree top view/            # 原始頂視風格參考
-```
-
-## 使用技術
-
-- HTML5
-- CSS3
-- JavaScript
-- Canvas 2D
-- LocalStorage
 
 ## 資料保存
 
@@ -116,4 +94,3 @@ TREEBLADE_X/
 ## 專案連結
 
 - GitHub：[tony428tw/TREEBLADE_X](https://github.com/tony428tw/TREEBLADE_X)
-- 問題回報：[GitHub Issues](https://github.com/tony428tw/TREEBLADE_X/issues)
