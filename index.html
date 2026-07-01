@@ -10,17 +10,50 @@
     <main class="shell">
       <header class="topbar">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <p class="eyebrow">Tree Top View Battle</p>
-            <h1>樹章戰鬥陀螺</h1>
-          </div>
+          <img class="brand-logo" src="assets/TreeBladeX_logo.png" alt="樹章戰鬥陀螺 TreeBlade X">
+          <h1 class="sr-only">樹章戰鬥陀螺 TreeBlade X</h1>
         </div>
         <button class="ghost-button" id="recordsButton" type="button">上場紀錄</button>
       </header>
 
       <section class="setup-view" id="setupView">
-        <p class="hint" id="modeHint">雙方各輸入三個植物名稱，每個植物會長成一顆俯視樹章陀螺。三回合各派一種植物對決，先得兩勝的植物樹章最強。</p>
+        <p class="hint" id="modeHint">3on3 輪替賽：雙方各準備三顆不同植物樹章，依序出戰。Spin Finish 得 1 分，Burst／Over Finish 得 2 分，Xtreme Finish 得 3 分，率先取得 4 分者獲勝。</p>
+
+        <details class="rules-panel">
+          <summary>戰鬥陀螺比賽規則</summary>
+          <div class="rules-grid">
+            <p><strong>同步發射</strong>　裁判喊出「3、2、1，Go Shoot！」時，雙方同時發射，並利用戰鬥盤中央的加速齒輪軌道高速衝刺、碰撞。</p>
+            <p><strong>Spin Finish・1 分</strong>　對手先停止旋轉，而你的陀螺仍持續旋轉。</p>
+            <p><strong>Burst Finish・2 分</strong>　撞擊使對手卡榫鬆脫並在場上解體。</p>
+            <p><strong>Over Finish・2 分</strong>　將對手撞出場外，落入戰鬥盤角落凹槽。</p>
+            <p><strong>Xtreme Finish・3 分</strong>　利用極速衝刺，將對手打入中央極限區洞口。</p>
+            <p><strong>平手</strong>　雙方同時達成得分條件或情況不明時不計分，重新對戰。</p>
+            <p><strong>官方 3on3</strong>　三顆陀螺依序標示 1、2、3 號，陣容零件不得重複；本遊戲以三種不同植物代表陣容並循環輪替，直到一方先取得 4 分。</p>
+          </div>
+        </details>
+
+        <section class="plant-upload-panel" aria-labelledby="plantUploadTitle">
+          <div class="upload-heading">
+            <div>
+              <p class="eyebrow">Custom Tree Top View</p>
+              <h2 id="plantUploadTitle">新增植物樹章</h2>
+            </div>
+            <p>輸入植物名稱並上傳對應的俯視圖片；隊伍輸入相同名稱時，會優先使用這張圖片。</p>
+          </div>
+          <div class="upload-controls">
+            <label>
+              <span>植物名稱</span>
+              <input id="customPlantName" type="text" maxlength="8" placeholder="例如：銀杏" autocomplete="off">
+            </label>
+            <label class="file-picker">
+              <span>Tree top view 圖片</span>
+              <input id="customPlantFile" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+            <button class="ghost-button upload-button" id="addPlantImageButton" type="button">加入樹章</button>
+          </div>
+          <p class="upload-status" id="uploadStatus" role="status"></p>
+          <div class="custom-plant-list" id="customPlantList" aria-label="已加入的自訂植物樹章"></div>
+        </section>
 
         <div class="setup-grid">
           <article class="player-card player-one">
@@ -61,7 +94,7 @@
               <div class="round-overlay hidden" id="roundOverlay"></div>
             </div>
             <div class="battle-controls">
-              <button class="primary-button small hidden" id="nextRoundButton" type="button">下一回合</button>
+              <button class="primary-button small hidden" id="nextRoundButton" type="button">下一局</button>
               <button class="primary-button small" id="rematchButton" type="button">重新對戰</button>
               <button class="ghost-button small" id="backButton" type="button">回設定</button>
             </div>

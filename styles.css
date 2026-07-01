@@ -69,19 +69,28 @@ button {
 .brand {
   display: flex;
   align-items: center;
-  gap: 16px;
+  min-width: 0;
 }
 
-.brand-mark {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  display: inline-block;
-  background:
-    radial-gradient(circle at 50% 50%, #f8e6a1 0 10%, transparent 11%),
-    radial-gradient(circle at 47% 48%, transparent 0 30%, rgba(91, 139, 72, 0.55) 31% 33%, transparent 34%),
-    conic-gradient(from 12deg, #6dae55, #b7d979, #3e8b58, #7ac7b4, #6dae55);
-  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.72), 0 8px 18px rgba(49, 104, 66, 0.18);
+.brand-logo {
+  display: block;
+  width: clamp(250px, 39vw, 500px);
+  max-height: 142px;
+  object-fit: contain;
+  object-position: left center;
+  mix-blend-mode: multiply;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 h1,
@@ -211,6 +220,135 @@ dialog {
 .plant-input:focus {
   border-color: var(--water);
   box-shadow: 0 0 0 4px rgba(103, 183, 189, 0.16);
+}
+
+.plant-upload-panel {
+  margin: 22px 0 26px;
+  padding: 20px 22px;
+  border: 1px solid rgba(88, 132, 91, 0.24);
+  border-radius: 10px;
+  background: rgba(255, 255, 248, 0.58);
+}
+
+.rules-panel {
+  margin: 18px 0 22px;
+  border: 1px solid rgba(88, 132, 91, 0.24);
+  border-radius: 10px;
+  background: rgba(255, 255, 248, 0.58);
+}
+
+.rules-panel summary {
+  padding: 15px 20px;
+  color: #41634a;
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 22px;
+  padding: 0 20px 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.rules-grid strong {
+  color: var(--leaf-dark);
+}
+
+.upload-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+.upload-heading h2 {
+  color: #41634a;
+  font-size: 22px;
+}
+
+.upload-heading > p {
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.upload-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(240px, 1.5fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.upload-controls label {
+  display: grid;
+  gap: 6px;
+  color: #41634a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.upload-controls input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid rgba(88, 132, 91, 0.34);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.upload-button {
+  min-height: 44px;
+}
+
+.upload-status {
+  min-height: 21px;
+  margin-top: 8px;
+  color: #3f7650;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.upload-status.error {
+  color: #a34c59;
+}
+
+.custom-plant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.custom-plant-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid rgba(88, 132, 91, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.custom-plant-item img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #eef4e9;
+}
+
+.remove-custom-plant {
+  border: 0;
+  color: #a34c59;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 900;
 }
 
 .plant-row {
@@ -626,6 +764,20 @@ dialog::backdrop {
 
   .player-card {
     padding: 18px;
+  }
+
+  .upload-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .upload-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .rules-grid {
+    grid-template-columns: 1fr;
   }
 
   .plant-row {
