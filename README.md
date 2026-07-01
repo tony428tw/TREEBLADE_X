@@ -7,9 +7,10 @@
 以植物樹冠為戰刃、以自然之力決勝的瀏覽器戰鬥陀螺遊戲。
 
 [開始遊玩](https://tony428tw.github.io/TREEBLADE_X/) 
-</div>
 
 Copyright © Jerry Hsu. All Rights Reserved.
+</div>
+
 
 ## 遊戲介紹
 
